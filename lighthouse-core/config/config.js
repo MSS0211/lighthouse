@@ -264,6 +264,30 @@ function deepCloneConfigJson(json) {
   return cloned;
 }
 
+/**
+ * @param {any} items
+ * @return {any}
+ */
+function _mergeOptionsOfItems(items) {
+  /** @type {Array<{path?: string, options?: Object<string, any>}>} */
+  const mergedItems = [];
+
+  for (const item of items) {
+    const existingItem = item.path && mergedItems.find(candidate => candidate.path === item.path);
+    if (!existingItem) {
+      mergedItems.push(item);
+      continue;
+    }
+
+    existingItem.options = Object.assign({}, existingItem.options, item.options);
+  }
+
+  return mergedItems;
+}
+
+/** @type {LH.Config.MergeOptionsOfItems} */
+const mergeOptionsOfItems = _mergeOptionsOfItems;
+
 class Config {
   /**
    * @constructor
@@ -302,19 +326,18 @@ class Config {
 
     // Expand audit/gatherer short-hand representations and merge in defaults
     // combine with require stages down there?
-    const auditsWithOptions = Config.expandAuditShorthandAndMergeOptions(configJSON.audits);
     // TODO(bckenny): is this actually LH.Config.Pass yet? **NO**, gathererDefn not right yet
     const passesWithGOptions = Config.expandGathererShorthandAndMergeOptions(passesWithDefaults);
 
     // The directory of the config path, if one was provided.
     const configDir = configPath ? path.dirname(configPath) : undefined;
 
-    let passes = Config.requireGatherers(passesWithGOptions, configDir);
-    let audits = Config.requireAudits(auditsWithOptions, configDir);
+    const passes = Config.requireGatherers(passesWithGOptions, configDir);
+    const audits = Config.requireAudits(configJSON.audits, configDir);
 
     // TODO(bckenny): Are these directly assignable from the json?
     /** @type {?Record<string, LH.Config.Category>} */
-    let categories = configJSON.categories || null;
+    const categories = configJSON.categories || null;
     /** @type {?Record<string, LH.Config.Group>} */
     const groups = configJSON.groups || null;
 
@@ -388,23 +411,21 @@ class Config {
   }
 
   /**
-   * Expands the audits from user-specified to the internal audit definition format.
-   *
-   * @param {?Array<LH.Config.AuditJson>=} audits
-   * @return {?Array<AuditWithOptions>}
+   * Expands the audits from user-specified JSON to an internal audit definition format.
+   * @param {LH.Config.Json['audits']} audits
+   * @return {?Array<{path: string, options?: {}} | {implementation: typeof Audit, path?: string, options?: {}}>}
    */
-  static expandAuditShorthandAndMergeOptions(audits) {
+  static expandAuditShorthand(audits) {
     if (!audits) {
       return null;
     }
 
     const newAudits = audits.map(audit => {
-      // TODO(bckenny): more precise conditionals
       if (typeof audit === 'string') {
         return {path: audit, options: {}};
-      } else if ('implementation' in audit) {
+      } else if ('implementation' in audit && typeof audit.implementation.audit === 'function') {
         return audit;
-      } else if ('path' in audit) {
+      } else if ('path' in audit && typeof audit.path === 'string') {
         return audit;
       } else if ('audit' in audit && typeof audit.audit === 'function') {
         return {implementation: audit, options: {}};
@@ -413,11 +434,11 @@ class Config {
       }
     });
 
-    return Config._mergeOptionsOfItems(newAudits);
+    return newAudits;
   }
 
   /**
-   * Expands the gatherers from user-specified to the internal gatherer definition format.
+   * Expands the gatherers from user-specified to an internal gatherer definition format.
    *
    * Input Examples:
    *  - 'my-gatherer'
@@ -445,31 +466,10 @@ class Config {
         }
       });
 
-      pass.gatherers = Config._mergeOptionsOfItems(pass.gatherers);
+      pass.gatherers = mergeOptionsOfItems(pass.gatherers);
     });
 
     return passes;
-  }
-
-  /**
-   * @param {Array<{path?: string, options?: Object<string, any>}>} items
-   * @return {Array<{path?: string, options?: Object<string, any>}>}
-   */
-  static _mergeOptionsOfItems(items) {
-    /** @type {Array<{path?: string, options?: Object<string, any>}>} */
-    const mergedItems = [];
-
-    for (const item of items) {
-      const existingItem = item.path && mergedItems.find(candidate => candidate.path === item.path);
-      if (!existingItem) {
-        mergedItems.push(item);
-        continue;
-      }
-
-      existingItem.options = Object.assign({}, existingItem.options, item.options);
-    }
-
-    return mergedItems;
   }
 
   /**
@@ -690,68 +690,45 @@ class Config {
   /**
    * Take an array of audits and audit paths and require any paths (possibly
    * relative to the optional `configPath`) using `Runner.resolvePlugin`,
-   * leaving only an array of Audits.
-   * @param {?Array<AuditWithOptions>} audits
+   * leaving only an array of AuditDefns.
+   * @param {LH.Config.Json['audits']} audits
    * @param {string=} configPath
-   * @return {?Array<LH.Config.AuditDefn>}
+   * @return {LH.Config['audits']}
    */
   static requireAudits(audits, configPath) {
-    if (!audits) {
+    const expandedAudits = Config.expandAuditShorthand(audits);
+    if (!expandedAudits) {
       return null;
     }
 
     const coreList = Runner.getAuditList();
-    // return audits.map(auditDefn => {
-    //   if ('implementation' in auditDefn) {
-    //     assertValidAudit(auditDefn.implementation, auditDefn.path);
-    //     return auditDefn;
-    //   }
-    //   const path = auditDefn.path;
-    //   // See if the audit is a Lighthouse core audit.
-    //   const coreAudit = coreList.find(a => a === `${path}.js`);
-    //   let requirePath = `../audits/${path}`;
-    //   if (!coreAudit) {
-    //     // Otherwise, attempt to find it elsewhere. This throws if not found.
-    //     requirePath = Runner.resolvePlugin(path, configPath, 'audit');
-    //   }
-
-    //   const newAuditDefn = {
-    //     implementation: require(requirePath),
-    //     path: auditDefn.path,
-    //     options: auditDefn.options
-    //   };
-    //   assertValidAudit(newAuditDefn.implementation, auditDefn.path);
-    //   return newAuditDefn;
-    // });
-
-    const mappy = audits.map(audit => {
-      let auditDefn;
-      let auditPath;
+    const auditDefns = expandedAudits.map(audit => {
+      /** @type {typeof Audit} */
+      let implementation;
       if ('implementation' in audit) {
-        auditDefn = audit;
+        implementation = audit.implementation;
       } else {
-        auditPath = audit.path;
         // See if the audit is a Lighthouse core audit.
-        const auditPathJs = `${auditPath}.js`;
+        const auditPathJs = `${audit.path}.js`;
         const coreAudit = coreList.find(a => a === auditPathJs);
-        let requirePath = `../audits/${auditPath}`;
+        let requirePath = `../audits/${audit.path}`;
         if (!coreAudit) {
           // Otherwise, attempt to find it elsewhere. This throws if not found.
-          requirePath = Runner.resolvePlugin(auditPath, configPath, 'audit');
+          requirePath = Runner.resolvePlugin(audit.path, configPath, 'audit');
         }
-
-        auditDefn = {
-          implementation: /** @type {typeof Audit} */ (require(requirePath)),
-          path: auditPath,
-          options: audit.options,
-        };
+        implementation = require(requirePath);
       }
 
-      assertValidAudit(auditDefn.implementation, auditPath);
-      return auditDefn;
+      return {
+        implementation,
+        path: audit.path,
+        options: audit.options || {},
+      };
     });
 
-    return mappy;
+    const mergedAuditDefns = mergeOptionsOfItems(auditDefns);
+    mergedAuditDefns.forEach(audit => assertValidAudit(audit.implementation, audit.path));
+    return mergedAuditDefns;
   }
 
   /**
@@ -826,13 +803,6 @@ class Config {
     return this._settings;
   }
 }
-
-/**
- * An intermediate type, stricter than LH.Config.AuditJson but less strict than
- * LH.Config.AuditDefn.
- * // TODO(bckenny): better name? options type?
- * @typedef {{path: string, options: {}} | {implementation: typeof Audit, path?: string, options: {}}} AuditWithOptions
- */
 
 // TODO(bckenny): graduate to real type
 /**

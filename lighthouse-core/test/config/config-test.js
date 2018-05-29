@@ -15,7 +15,7 @@ const Audit = require('../../audits/audit');
 
 /* eslint-env mocha */
 
-describe('Config', () => {
+describe.only('Config', () => {
   let origConfig;
   beforeEach(() => {
     origConfig = JSON.parse(JSON.stringify(defaultConfig));
@@ -598,7 +598,7 @@ describe('Config', () => {
     });
   });
 
-  describe('generateNewFilteredConfig', () => {
+  describe('filterConfigIfNeeded', () => {
     it('should not mutate the original config', () => {
       const configCopy = JSON.parse(JSON.stringify(origConfig));
       configCopy.settings.onlyCategories = ['performance'];
@@ -723,11 +723,18 @@ describe('Config', () => {
     });
   });
 
-  describe('expandAuditShorthandAndMergeOptions', () => {
+  describe('#requireAudits', () => {
     it('should merge audits', () => {
-      const audits = ['a', {path: 'b', options: {x: 1, y: 1}}, {path: 'b', options: {x: 2}}];
-      const merged = Config.expandAuditShorthandAndMergeOptions(audits);
-      assert.deepEqual(merged, [{path: 'a', options: {}}, {path: 'b', options: {x: 2, y: 1}}]);
+      const audits = [
+        'user-timings',
+        {path: 'is-on-https', options: {x: 1, y: 1}},
+        {path: 'is-on-https', options: {x: 2}}
+      ];
+      const merged = Config.requireAudits(audits);
+      // Round-trip through JSON to drop live 'implementation' prop.
+      const mergedJson = JSON.parse(JSON.stringify(merged));
+      assert.deepEqual(mergedJson,
+        [{path: 'user-timings', options: {}}, {path: 'is-on-https', options: {x: 2, y: 1}}]);
     });
   });
 

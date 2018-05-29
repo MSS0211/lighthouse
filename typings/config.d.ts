@@ -117,6 +117,8 @@ declare global {
         auditRefs: AuditRef[];
       }
       export interface Group extends GroupJson {}
+
+      export type MergeOptionsOfItems = <T extends {path?: string, options: Record<string, any>}>(items: T[]) => T[];
     }
   }
 }
