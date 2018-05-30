@@ -17,7 +17,8 @@ const path = require('path');
 const Audit = require('../audits/audit');
 const Runner = require('../runner');
 
-/** @typedef {import('../gather/gatherers/gatherer.js')} Gatherer */
+/** @typedef {typeof import('../gather/gatherers/gatherer.js')} GathererConstructor */
+/** @typedef {InstanceType<GathererConstructor>} Gatherer */
 
 // TODO(bckenny): embrace the nulls instead of undefined
 // TODO(bckenny): how to start moving types from externs to Config class?
@@ -162,20 +163,23 @@ function assertValidGatherer(gathererInstance, gathererName) {
   }
 }
 
-// TODO(bckenny): make Flags partial by default?
 /**
  * Creates a settings object from potential flags object by dropping all the properties
  * that don't exist on Config.Settings.
+ * TODO(bckenny): fix Flags type
  * @param {Partial<LH.Flags>=} flags
  * @return {Partial<LH.Config.Settings>}
  */
 function cleanFlagsForSettings(flags = {}) {
+  /** @type {Partial<LH.Config.Settings>} */
   const settings = {};
-  /** @type {Array<keyof LH.SharedFlagsSettings>} */
+
   const keys = Object.keys(flags);
   for (const key of keys) {
+    // @ts-ignore - intentionally testing to make sure key is defined on defaultSettings.
     if (typeof constants.defaultSettings[key] !== 'undefined') {
-      settings[key] = flags[key];
+      const safekey = /** @type {keyof LH.SharedFlagsSettings} */ (key);
+      settings[safekey] = flags[safekey];
     }
   }
 
@@ -318,21 +322,16 @@ class Config {
       configJSON = Config.extendConfigJSON(deepCloneConfigJson(defaultConfig), configJSON);
     }
 
-    const settings = Config.initSettings(configJSON.settings, flags);
-
-    // Augment passes with necessary defaults
-    const passesWithDefaults = Config.augmentPassesWithDefaults(configJSON.passes);
-    Config.adjustDefaultPassForThrottling(settings, passesWithDefaults);
-
-    // Expand audit/gatherer short-hand representations and merge in defaults
-    // combine with require stages down there?
-    // TODO(bckenny): is this actually LH.Config.Pass yet? **NO**, gathererDefn not right yet
-    const passesWithGOptions = Config.expandGathererShorthandAndMergeOptions(passesWithDefaults);
-
     // The directory of the config path, if one was provided.
     const configDir = configPath ? path.dirname(configPath) : undefined;
 
-    const passes = Config.requireGatherers(passesWithGOptions, configDir);
+    const settings = Config.initSettings(configJSON.settings, flags);
+
+    // Augment passes with necessary defaults and require gatherers.
+    const passesWithDefaults = Config.augmentPassesWithDefaults(configJSON.passes);
+    Config.adjustDefaultPassForThrottling(settings, passesWithDefaults);
+    const passes = Config.requireGatherers(passesWithDefaults, configDir);
+
     const audits = Config.requireAudits(configJSON.audits, configDir);
 
     // TODO(bckenny): Are these directly assignable from the json?
@@ -445,31 +444,33 @@ class Config {
    *  - class MyGatherer extends Gatherer { }
    *  - {instance: myGathererInstance}
    *
-   * @param {?Array<LH.Config.PassJson>=} passes
-   * @return {?Array<LH.Config.Pass>} passes
+   * @param {Array<LH.Config.GathererJson>} gatherers
+   * @return {Array<{path: string, options?: {}} | {implementation: GathererConstructor, options?: {}} | {instance: Gatherer, options?: {}}>} passes
    */
-  static expandGathererShorthandAndMergeOptions(passes) {
-    if (!passes) {
-      return null;
-    }
-
-    passes.forEach(pass => {
-      pass.gatherers = pass.gatherers.map(gatherer => {
-        if (typeof gatherer === 'string') {
-          return {path: gatherer, options: {}};
-        } else if (typeof gatherer === 'function') {
-          return {implementation: gatherer, options: {}};
-        } else if (gatherer && typeof gatherer.beforePass === 'function') {
-          return {instance: gatherer, options: {}};
-        } else {
-          return gatherer;
+  static expandGathererShorthand(gatherers) {
+    const expanded = gatherers.map(gatherer => {
+      // TODO(bckenny): better conditionals
+      if (typeof gatherer === 'string') {
+        return {path: gatherer, options: {}};
+      } else if ('path' in gatherer) {
+        if (typeof gatherer.path !== 'string') {
+          throw new Error('Invalid Gatherer type ' + JSON.stringify(gatherer));
         }
-      });
-
-      pass.gatherers = mergeOptionsOfItems(pass.gatherers);
+        return gatherer;
+      } else if ('implementation' in gatherer) {
+        return gatherer;
+      } else if ('instance' in gatherer) {
+        return gatherer; // combine with implementation
+      } else if (typeof gatherer === 'function') {
+        return {implementation: gatherer, options: {}};
+      } else if (gatherer && typeof gatherer.beforePass === 'function') {
+        return {instance: gatherer, options: {}};
+      } else {
+        throw new Error('Invalid Gatherer type ' + JSON.stringify(gatherer));
+      }
     });
 
-    return passes;
+    return expanded;
   }
 
   /**
@@ -703,7 +704,6 @@ class Config {
 
     const coreList = Runner.getAuditList();
     const auditDefns = expandedAudits.map(audit => {
-      /** @type {typeof Audit} */
       let implementation;
       if ('implementation' in audit) {
         implementation = audit.implementation;
@@ -716,7 +716,7 @@ class Config {
           // Otherwise, attempt to find it elsewhere. This throws if not found.
           requirePath = Runner.resolvePlugin(audit.path, configPath, 'audit');
         }
-        implementation = require(requirePath);
+        implementation = /** @type {typeof Audit} */ (require(requirePath));
       }
 
       return {
@@ -732,10 +732,12 @@ class Config {
   }
 
   /**
-   *
-   * @param {?Array<LH.Config.Pass>} passes
+   * Takes an array of passes with every property now initialized except the
+   * gatherers and requires them, (relative to the optional `configPath` if
+   * provided) using `Runner.resolvePlugin`, returning an array of full Passes.
+   * @param {?Array<Required<LH.Config.PassJson>>} passes
    * @param {string=} configPath
-   * @return {?Array<LH.Config.Pass>}
+   * @return {LH.Config['passes']}
    */
   static requireGatherers(passes, configPath) {
     if (!passes) {
@@ -743,33 +745,49 @@ class Config {
     }
 
     const coreList = Runner.getGathererList();
-    passes.forEach(pass => {
-      pass.gatherers.forEach(gathererDefn => {
-        if (!gathererDefn.instance) {
-          let GathererClass = gathererDefn.implementation;
-          if (!GathererClass) {
-            // See if the gatherer is a Lighthouse core gatherer
-            const name = gathererDefn.path;
-            const coreGatherer = coreList.find(a => a === `${name}.js`);
-
-            let requirePath = `../gather/gatherers/${name}`;
-            if (!coreGatherer) {
-              // Otherwise, attempt to find it elsewhere. This throws if not found.
-              requirePath = Runner.resolvePlugin(name, configPath, 'gatherer');
-            }
-
-            GathererClass = require(requirePath);
-          }
-
-          gathererDefn.implementation = GathererClass;
-          gathererDefn.instance = new GathererClass();
+    const fullPasses = passes.map(pass => {
+      const gathererDefns = Config.expandGathererShorthand(pass.gatherers).map(gathererDefn => {
+        if ('instance' in gathererDefn) {
+          return {
+            instance: gathererDefn.instance,
+            options: gathererDefn.options || {},
+          };
         }
 
-        assertValidGatherer(gathererDefn.instance, gathererDefn.path);
+        let GathererClass;
+        let path;
+        if ('implementation' in gathererDefn) {
+          GathererClass = gathererDefn.implementation;
+        } else {
+          // See if the gatherer is a Lighthouse core gatherer
+          const name = gathererDefn.path;
+          const coreGatherer = coreList.find(a => a === `${name}.js`);
+
+          let requirePath = `../gather/gatherers/${name}`;
+          if (!coreGatherer) {
+            // Otherwise, attempt to find it elsewhere. This throws if not found.
+            requirePath = Runner.resolvePlugin(name, configPath, 'gatherer');
+          }
+
+          GathererClass = /** @type {GathererConstructor} */ (require(requirePath));
+          path = name;
+        }
+
+        return {
+          instance: new GathererClass(),
+          implementation: GathererClass,
+          path,
+          options: gathererDefn.options || {},
+        };
       });
+
+      const mergedGathererDefns = mergeOptionsOfItems(gathererDefns);
+      mergedGathererDefns.forEach(gatherer => assertValidGatherer(gatherer.instance, gatherer.path));
+
+      return Object.assign(pass, {gatherers: mergedGathererDefns});
     });
 
-    return passes;
+    return fullPasses;
   }
 
   // TODO(bckenny): configDir not necessary?
@@ -803,14 +821,5 @@ class Config {
     return this._settings;
   }
 }
-
-// TODO(bckenny): graduate to real type
-/**
- * @typedef {Object} Config.GathererWithOptions
- * @property {string=} path
- * @property {!Gatherer=} instance
- * @property {!GathererConstructor=} implementation
- * @property {Object=} options
- */
 
 module.exports = Config;

@@ -15,7 +15,7 @@ const Audit = require('../../audits/audit');
 
 /* eslint-env mocha */
 
-describe.only('Config', () => {
+describe('Config', () => {
   let origConfig;
   beforeEach(() => {
     origConfig = JSON.parse(JSON.stringify(defaultConfig));
@@ -738,7 +738,7 @@ describe.only('Config', () => {
     });
   });
 
-  describe('expandGathererShorthandAndMergeOptions', () => {
+  describe('#requireGatherers', () => {
     it('should merge gatherers', () => {
       const gatherers = [
         'viewport-dimensions',
@@ -746,12 +746,15 @@ describe.only('Config', () => {
         {path: 'viewport-dimensions', options: {y: 1}},
       ];
 
-      const merged = Config.expandGathererShorthandAndMergeOptions([{gatherers}]);
-      assert.deepEqual(merged[0].gatherers, [{path: 'viewport-dimensions', options: {x: 1, y: 1}}]);
-    });
-  });
+      debugger;
+      const merged = Config.requireGatherers([{gatherers}]);
+      // Round-trip through JSON to drop live 'instance'/'implementation' props.
+      const mergedJson = JSON.parse(JSON.stringify(merged));
 
-  describe('#requireGatherers', () => {
+      assert.deepEqual(mergedJson[0].gatherers,
+        [{path: 'viewport-dimensions', options: {x: 1, y: 1}, instance: {}}]);
+    });
+
     function loadGatherer(gathererEntry) {
       const config = new Config({passes: [{gatherers: [gathererEntry]}]});
       return config.passes[0].gatherers[0];

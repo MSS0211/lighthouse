@@ -60,7 +60,7 @@ declare global {
       } | {
         instance: InstanceType<typeof Gatherer>;
         options?: {};
-      } | string;
+      } | Gatherer | typeof Gatherer | string;
 
       export interface CategoryJson {
         title: string;
@@ -100,8 +100,9 @@ declare global {
       }
 
       export interface GathererDefn {
-        implementation: typeof Gatherer;
+        implementation?: typeof Gatherer;
         instance: InstanceType<typeof Gatherer>;
+        path?: string;
         options: {};
       }
 
