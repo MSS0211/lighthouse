@@ -340,7 +340,6 @@ class Config {
     /** @type {?Record<string, LH.Config.Group>} */
     const groups = configJSON.groups || null;
 
-    this._configDir = configDir;
     this._settings = settings;
     this._passes = passes;
     this._audits = audits;
@@ -788,12 +787,6 @@ class Config {
     });
 
     return fullPasses;
-  }
-
-  // TODO(bckenny): configDir not necessary?
-  /** @type {string} */
-  get configDir() {
-    return this._configDir;
   }
 
   /** @type {LH.Config['passes']} */
