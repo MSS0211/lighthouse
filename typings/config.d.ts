@@ -12,7 +12,7 @@ declare global {
     /**
      * The full, normalized Lighthouse Config.
      */
-    export interface Config {
+    export interface Config extends Config.Json {
       settings: Config.Settings;
       passes: Config.Pass[] | null;
       audits: Config.AuditDefn[] | null;
@@ -27,10 +27,10 @@ declare global {
       export interface Json {
         extends?: 'lighthouse:default' | 'lighthouse:full' | string | boolean;
         settings?: SettingsJson;
-        passes?: PassJson[];
-        audits?: Config.AuditJson[];
-        categories?: Record<string, CategoryJson>;
-        groups?: Record<string, Config.GroupJson>;
+        passes?: PassJson[] | null;
+        audits?: Config.AuditJson[] | null;
+        categories?: Record<string, CategoryJson> | null;
+        groups?: Record<string, Config.GroupJson> | null;
       }
 
       export interface SettingsJson extends SharedFlagsSettings {
