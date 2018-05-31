@@ -448,21 +448,23 @@ class Config {
    */
   static expandGathererShorthand(gatherers) {
     const expanded = gatherers.map(gatherer => {
-      // TODO(bckenny): better conditionals
       if (typeof gatherer === 'string') {
+        // just 'path/to/gatherer'
         return {path: gatherer, options: {}};
       } else if ('path' in gatherer) {
+        // {path: 'path/to/gatherer', ...}
         if (typeof gatherer.path !== 'string') {
           throw new Error('Invalid Gatherer type ' + JSON.stringify(gatherer));
         }
         return gatherer;
-      } else if ('implementation' in gatherer) {
+      } else if ('implementation' in gatherer || 'instance' in gatherer) {
+        // {implementation: GathererConstructor, ...} or {instance: GathererInstance, ...}
         return gatherer;
-      } else if ('instance' in gatherer) {
-        return gatherer; // combine with implementation
       } else if (typeof gatherer === 'function') {
+        // just GathererConstructor
         return {implementation: gatherer, options: {}};
       } else if (gatherer && typeof gatherer.beforePass === 'function') {
+        // just GathererInstance
         return {instance: gatherer, options: {}};
       } else {
         throw new Error('Invalid Gatherer type ' + JSON.stringify(gatherer));
