@@ -32,7 +32,7 @@ function validatePasses(passes, audits) {
   if (!Array.isArray(passes)) {
     return;
   }
-  
+
   const requiredGatherers = Config.getGatherersNeededByAudits(audits);
 
   // Log if we are running gathers that are not needed by the audits listed in the config
@@ -386,7 +386,7 @@ class Config {
   }
 
   /**
-   * @param {LH.Config.SettingsJson=} settings 
+   * @param {LH.Config.SettingsJson=} settings
    * @param {LH.Flags=} flags
    * @return {LH.Config.Settings}
    */
@@ -481,7 +481,6 @@ class Config {
 
     const defaultPass = passes.find(pass => pass.passName === 'defaultPass');
     if (!defaultPass) return;
-    defaultPass;
     const overrides = constants.nonSimulatedPassConfigOverrides;
     defaultPass.pauseAfterLoadMs =
       Math.max(overrides.pauseAfterLoadMs, defaultPass.pauseAfterLoadMs);
@@ -496,22 +495,14 @@ class Config {
    * @param {Config} config
    */
   static filterConfigIfNeeded(config) {
-    // 0. Extract filtering information, if any.
-    const categoryIds = config.settings.onlyCategories;
-    const auditIds = config.settings.onlyAudits;
-    const skipAuditIds = config.settings.skipAudits;
-
-    if (!categoryIds && !auditIds && !skipAuditIds) {
+    const settings = config.settings;
+    if (!settings.onlyCategories && !settings.onlyAudits && !settings.skipAudits) {
       return config;
     }
 
     // 1. Filter to just the chosen categories/audits
-    const {categories, requestedAuditNames} = Config.filterCategoriesAndAudits(
-      config.categories,
-      categoryIds,
-      auditIds,
-      skipAuditIds
-    );
+    const {categories, requestedAuditNames} = Config.filterCategoriesAndAudits(config.categories,
+      settings);
 
     // 2. Resolve which audits will need to run
     const audits = config.audits && config.audits.filter(auditDefn =>
@@ -522,7 +513,7 @@ class Config {
 
     // 4. Filter to only the neccessary passes
     const passes = Config.generatePassesNeededByGatherers(config.passes, requiredGathererIds);
-    
+
     config._categories = categories;
     config._audits = audits;
     config._passes = passes;
@@ -531,27 +522,25 @@ class Config {
   /**
    * Filter out any unrequested categories or audits from the categories object.
    * @param {LH.Config['categories']} oldCategories
-   * @param {?Array<string>} includedCategoryIds
-   * @param {?Array<string>} includedAuditIds
-   * @param {?Array<string>} skippedAuditIds
+   * @param {LH.Config.Settings} settings
    * @return {{categories: LH.Config['categories'], requestedAuditNames: Set<string>}}
    */
-  static filterCategoriesAndAudits(oldCategories, includedCategoryIds, includedAuditIds, skippedAuditIds) {
+  static filterCategoriesAndAudits(oldCategories, settings) {
     if (!oldCategories) {
       return {categories: null, requestedAuditNames: new Set()};
     }
 
-    if (includedAuditIds && skippedAuditIds) {
+    if (settings.onlyAudits && settings.skipAudits) {
       throw new Error('Cannot set both skipAudits and onlyAudits');
     }
 
     /** @type {NonNullable<LH.Config['categories']>} */
     const categories = {};
-    const filterByIncludedCategory = !!includedCategoryIds;
-    const filterByIncludedAudit = !!includedAuditIds;
-    const categoryIds = includedCategoryIds || [];
-    const auditIds = includedAuditIds || [];
-    const skipAuditIds = skippedAuditIds || [];
+    const filterByIncludedCategory = !!settings.onlyCategories;
+    const filterByIncludedAudit = !!settings.onlyAudits;
+    const categoryIds = settings.onlyCategories || [];
+    const auditIds = settings.onlyAudits || [];
+    const skipAuditIds = settings.skipAudits || [];
 
     // warn if the category is not found
     categoryIds.forEach(categoryId => {
@@ -620,7 +609,7 @@ class Config {
     if (!categories) {
       return [];
     }
-    
+
     return Object.keys(categories).map(id => {
       const title = categories[id].title;
       return {id, title};
@@ -775,10 +764,10 @@ class Config {
         };
       });
 
-      const mergedGathererDefns = mergeOptionsOfItems(gathererDefns);
-      mergedGathererDefns.forEach(gatherer => assertValidGatherer(gatherer.instance, gatherer.path));
+      const mergedDefns = mergeOptionsOfItems(gathererDefns);
+      mergedDefns.forEach(gatherer => assertValidGatherer(gatherer.instance, gatherer.path));
 
-      return Object.assign(pass, {gatherers: mergedGathererDefns});
+      return Object.assign(pass, {gatherers: mergedDefns});
     });
 
     return fullPasses;

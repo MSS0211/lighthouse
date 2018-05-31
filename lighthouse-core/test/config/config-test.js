@@ -728,7 +728,7 @@ describe('Config', () => {
       const audits = [
         'user-timings',
         {path: 'is-on-https', options: {x: 1, y: 1}},
-        {path: 'is-on-https', options: {x: 2}}
+        {path: 'is-on-https', options: {x: 2}},
       ];
       const merged = Config.requireAudits(audits);
       // Round-trip through JSON to drop live 'implementation' prop.
@@ -746,7 +746,6 @@ describe('Config', () => {
         {path: 'viewport-dimensions', options: {y: 1}},
       ];
 
-      debugger;
       const merged = Config.requireGatherers([{gatherers}]);
       // Round-trip through JSON to drop live 'instance'/'implementation' props.
       const mergedJson = JSON.parse(JSON.stringify(merged));
