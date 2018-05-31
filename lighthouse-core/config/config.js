@@ -6,7 +6,6 @@
 'use strict';
 
 const defaultConfigPath = './default-config.js';
-/** @type {LH.Config.Json} */ // TODO(bckenny): why is this declaration necessary?
 const defaultConfig = require('./default-config.js');
 const fullConfig = require('./full-config.js');
 const constants = require('./constants');
