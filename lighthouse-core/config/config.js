@@ -20,7 +20,6 @@ const Runner = require('../runner');
 /** @typedef {typeof import('../gather/gatherers/gatherer.js')} GathererConstructor */
 /** @typedef {InstanceType<GathererConstructor>} Gatherer */
 
-// TODO(bckenny): embrace the nulls instead of undefined
 // TODO(bckenny): how to start moving types from externs to Config class?
 // TODO(bckenny): make LH.Config a valid LH.Config.Json
 // TODO(bckenny): add test for round trip json -> Config -> back into Config (and unchanged)
@@ -187,13 +186,13 @@ function cleanFlagsForSettings(flags = {}) {
 }
 
 // TODO(phulce): disentangle this merge function
-// TODO(bckenny): type in externs? T and U extends below, returns T & U?
 /**
+ * More widely typed than exposed merge() function, below.
  * @param {Object<string, any>|Array<any>|undefined|null} base
  * @param {Object<string, any>|Array<any>} extension
  * @param {boolean=} overwriteArrays
  */
-function merge(base, extension, overwriteArrays = false) {
+function _merge(base, extension, overwriteArrays = false) {
   // If the default value doesn't exist or is explicitly null, defer to the extending value
   if (typeof base === 'undefined' || base === null) {
     return extension;
@@ -214,13 +213,20 @@ function merge(base, extension, overwriteArrays = false) {
     Object.keys(extension).forEach(key => {
       const localOverwriteArrays = overwriteArrays ||
         (key === 'settings' && typeof base[key] === 'object');
-      base[key] = merge(base[key], extension[key], localOverwriteArrays);
+      base[key] = _merge(base[key], extension[key], localOverwriteArrays);
     });
     return base;
   }
 
   return extension;
 }
+
+/**
+ * Until support of jsdoc templates with constraints, type in config.d.ts.
+ * See https://github.com/Microsoft/TypeScript/issues/24283
+ * @type {LH.Config.Merge}
+ */
+const merge = _merge;
 
 /**
  * @template T
@@ -269,10 +275,11 @@ function deepCloneConfigJson(json) {
 }
 
 /**
- * @param {any} items
- * @return {any}
+ * Until support of jsdoc templates with constraints, type in config.d.ts.
+ * See https://github.com/Microsoft/TypeScript/issues/24283
+ * @type {LH.Config.MergeOptionsOfItems}
  */
-function _mergeOptionsOfItems(items) {
+const mergeOptionsOfItems = (function(items) {
   /** @type {Array<{path?: string, options?: Object<string, any>}>} */
   const mergedItems = [];
 
@@ -287,10 +294,7 @@ function _mergeOptionsOfItems(items) {
   }
 
   return mergedItems;
-}
-
-/** @type {LH.Config.MergeOptionsOfItems} */
-const mergeOptionsOfItems = _mergeOptionsOfItems;
+});
 
 class Config {
   /**
@@ -332,19 +336,11 @@ class Config {
     Config.adjustDefaultPassForThrottling(settings, passesWithDefaults);
     const passes = Config.requireGatherers(passesWithDefaults, configDir);
 
-    const audits = Config.requireAudits(configJSON.audits, configDir);
-
-    // TODO(bckenny): Are these directly assignable from the json?
-    /** @type {?Record<string, LH.Config.Category>} */
-    const categories = configJSON.categories || null;
-    /** @type {?Record<string, LH.Config.Group>} */
-    const groups = configJSON.groups || null;
-
     this._settings = settings;
     this._passes = passes;
-    this._audits = audits;
-    this._categories = categories;
-    this._groups = groups;
+    this._audits = Config.requireAudits(configJSON.audits, configDir);
+    this._categories = configJSON.categories || null;
+    this._groups = configJSON.groups || null;
 
     Config.filterConfigIfNeeded(this);
 
@@ -387,7 +383,6 @@ class Config {
     }
 
     const {defaultPassConfig} = constants;
-    // TODO(bckenny): should be fixed with merge typing
     return passes.map(pass => merge(deepClone(defaultPassConfig), pass));
   }
 
@@ -404,7 +399,6 @@ class Config {
     // Override any applicable settings with CLI flags
     const settingsWithFlags = merge(settingWithDefaults || {}, cleanFlagsForSettings(flags), true);
 
-    // TODO(bckenny): type mismatch should be fixed by merge typing
     return settingsWithFlags;
   }
 

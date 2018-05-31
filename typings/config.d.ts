@@ -14,7 +14,6 @@ declare global {
      */
     export interface Config {
       settings: Config.Settings;
-      // TODO(bckenny): these should actually be nullable, not optional?
       passes: Config.Pass[] | null;
       audits: Config.AuditDefn[] | null;
       categories: Record<string, Config.Category> | null;
@@ -120,6 +119,11 @@ declare global {
       export interface Group extends GroupJson {}
 
       export type MergeOptionsOfItems = <T extends {path?: string, options: Record<string, any>}>(items: T[]) => T[];
+
+      export type Merge = {
+        <T extends Record<string, any>, U extends Record<string, any>>(base: T|null|undefined, extension: U, overwriteArrays?: boolean): T & U;
+        <T extends Array<any>, U extends Array<any>>(base: T|null|undefined, extension: T, overwriteArrays?: boolean): T & U;
+      }
     }
   }
 }
