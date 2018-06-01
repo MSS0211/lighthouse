@@ -228,7 +228,17 @@ const merge = _merge;
  */
 function cloneArrayWithPluginSafety(array) {
   return array.map(item => {
-    return typeof item === 'object' ? Object.assign({}, item) : item;
+    if (typeof item === 'object') {
+      // Return copy of instance and prototype chain (in case item is instantiated class).
+      return Object.assign(
+        Object.create(
+          Object.getPrototypeOf(item)
+        ),
+        item
+      );
+    }
+
+    return item;
   });
 }
 
