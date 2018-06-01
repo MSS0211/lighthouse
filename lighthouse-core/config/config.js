@@ -19,11 +19,6 @@ const Runner = require('../runner');
 /** @typedef {typeof import('../gather/gatherers/gatherer.js')} GathererConstructor */
 /** @typedef {InstanceType<GathererConstructor>} Gatherer */
 
-// TODO(bckenny): how to start moving types from externs to Config class?
-// TODO(bckenny): make LH.Config a valid LH.Config.Json
-// TODO(bckenny): add test for round trip json -> Config -> back into Config (and unchanged)
-// TODO(bckenny): test above including extends and only() to make sure they're indompetent
-
 /**
  * @param {LH.Config['passes']} passes
  * @param {LH.Config['audits']} audits
