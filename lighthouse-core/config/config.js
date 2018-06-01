@@ -167,9 +167,8 @@ function cleanFlagsForSettings(flags = {}) {
   /** @type {Partial<LH.Config.Settings>} */
   const settings = {};
 
-  const keys = Object.keys(flags);
-  for (const key of keys) {
-    // @ts-ignore - intentionally testing to make sure key is defined on defaultSettings.
+  for (const key of Object.keys(flags)) {
+    // @ts-ignore - intentionally testing some keys not on defaultSettings to discard them.
     if (typeof constants.defaultSettings[key] !== 'undefined') {
       const safekey = /** @type {keyof LH.SharedFlagsSettings} */ (key);
       settings[safekey] = flags[safekey];
@@ -234,7 +233,8 @@ function cloneArrayWithPluginSafety(array) {
 }
 
 /**
- * // TODO(bckenny): could adopt "jsonified" type to ensure T is jsonifiable: https://github.com/Microsoft/TypeScript/issues/21838
+ * // TODO(bckenny): could adopt "jsonified" type to ensure T will survive JSON
+ * round trip: https://github.com/Microsoft/TypeScript/issues/21838
  * @template T
  * @param {T} json
  * @return {T}
