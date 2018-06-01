@@ -572,6 +572,27 @@ describe('Config', () => {
     assert.ok(typeof config.settings.maxWaitForLoad === 'number', 'missing setting from default');
   });
 
+  it('is idempotent when accepting a canonicalized Config as valid ConfigJson input', () => {
+    const config = new Config(defaultConfig);
+    const configAgain = new Config(config);
+    assert.deepEqual(config, configAgain);
+  });
+
+  it('is idempotent accepting a canonicalized filtered Config as valid ConfigJson input', () => {
+    const extendedJson = {
+      extends: 'lighthouse:default',
+      settings: {
+        onlyCategories: ['pwa'],
+      },
+    };
+    const config = new Config(extendedJson);
+    assert.equal(config.passes.length, 3, 'did not filter config');
+    assert.equal(Object.keys(config.categories).length, 1, 'did not filter config');
+    assert.deepEqual(config.settings.onlyCategories, ['pwa']);
+    const configAgain = new Config(config);
+    assert.deepEqual(config, configAgain);
+  });
+
   describe('#extendConfigJSON', () => {
     it('should merge passes', () => {
       const configA = {
